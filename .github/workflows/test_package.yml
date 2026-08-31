@@ -50,4 +50,4 @@ jobs:
 
       - name: Run demos
         working-directory: demos
-        run: pytest . -sv
+        run: python3 -m pytest . -sv
