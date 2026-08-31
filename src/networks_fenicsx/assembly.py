@@ -12,6 +12,7 @@ import numpy as np
 import numpy.typing as npt
 
 import basix
+import dolfinx.fem.petsc as _petsc_fem
 import dolfinx.la.petsc as _petsc_la
 import ufl
 from dolfinx import common, fem
@@ -328,12 +329,12 @@ class HydraulicNetworkAssembler:
     @common.timed("nxfx:HydraulicNetworkAssembler:assemble")
     def assemble(
         self,
-        A: PETSc.Mat | None = None,  # type: ignore[name-defined]
-        b: PETSc.Mat | None = None,  # type: ignore[name-defined]
+        A: PETSc.Mat | None = None,
+        b: PETSc.Vec | None = None,
         assemble_lhs: bool = True,
         assemble_rhs: bool = True,
         kind: str | typing.Sequence[typing.Sequence[str]] | None = None,
-    ) -> tuple[PETSc.Mat, PETSc.Vec]:  # type: ignore[name-defined]
+    ) -> tuple[PETSc.Mat, PETSc.Vec]:
         """Assemble system matrix and rhs vector.
 
         Note:
@@ -351,20 +352,21 @@ class HydraulicNetworkAssembler:
         """
         if assemble_lhs:
             if A is None:
-                A = fem.petsc.create_matrix([[aij for aij in ai] for ai in self._a], kind=kind)
-            A = fem.petsc.assemble_matrix(A, self._a, bcs=[])  # type: ignore
+                A = _petsc_fem.create_matrix([[aij for aij in ai] for ai in self._a], kind=kind)
+            A = _petsc_fem.assemble_matrix(A, self._a, bcs=[])  # type: ignore
             A.assemble()
             kind = "nest" if A.getType() == PETSc.Mat.Type.NEST else kind  # type: ignore[attr-defined]
         if assemble_rhs:
             if b is None:
                 assert isinstance(kind, str) or kind is None
-                b = fem.petsc.create_vector(fem.extract_function_spaces(self._L), kind=kind)
-            b = fem.petsc.assemble_vector(b, self._L)  # type: ignore
+                b = _petsc_fem.create_vector(fem.extract_function_spaces(self._L), kind=kind)
+            b = _petsc_fem.assemble_vector(b, self._L)  # type: ignore
             _petsc_la._ghost_update(
                 b,
-                insert_mode=PETSc.InsertMode.ADD_VALUES,  # type: ignore[attr-defined]
-                scatter_mode=PETSc.ScatterMode.REVERSE,  # type: ignore[attr-defined]
+                insert_mode=PETSc.InsertMode.ADD_VALUES,  # type: ignore[arg-type]
+                scatter_mode=PETSc.ScatterMode.REVERSE,  # type: ignore[arg-type]
             )
+        assert A is not None and b is not None
         return (A, b)
 
     @property
