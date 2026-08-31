@@ -14,6 +14,8 @@ jobs:
     container: ghcr.io/fenics/dolfinx/dolfinx:${{ matrix.label }}
     env:
       DEB_PYTHON_INSTALL_LAYOUT: deb_system
+      PRTE_MCA_rmaps_default_mapping_policy: ":oversubscribe"
+
 
     strategy:
       fail-fast: false
@@ -21,7 +23,7 @@ jobs:
         label: ["stable", "nightly"]
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Update pip
         run: python3 -m pip install --upgrade pip
@@ -48,4 +50,4 @@ jobs:
 
       - name: Run demos
         working-directory: demos
-        run: pytest . -sv
+        run: python3 -m pytest . -sv

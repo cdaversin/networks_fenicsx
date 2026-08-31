@@ -328,23 +328,27 @@ class NetworkMesh:
             cell_markers_ = np.empty((0,), dtype=np.int32)
             orientations = np.empty(0, dtype=np.float64)
 
-        sig = inspect.signature(mesh.create_cell_partitioner)
-        part_kwargs = {}
-        if "max_facet_to_cell_links" in list(sig.parameters.keys()):
-            part_kwargs["max_facet_to_cell_links"] = np.max(max_connections)
-        partitioner = mesh.create_cell_partitioner(mesh.GhostMode.shared_facet, **part_kwargs)
-        sig = inspect.signature(mesh.create_mesh)
-        kwargs = {}
-        if "max_facet_to_cell_links" in list(sig.parameters.keys()):
-            kwargs["max_facet_to_cell_links"] = np.max(max_connections)
+        max_facet_to_cell_links = np.max(max_connections)
+
+        if hasattr(mesh, "create_cell_partitioner"):
+            sig = inspect.signature(mesh.create_cell_partitioner)
+            if "max_facet_to_cell_links" in list(sig.parameters.keys()):
+                part = mesh.create_cell_partitioner(
+                    mesh.GhostMode.shared_facet,
+                    max_facet_to_cell_links=max_facet_to_cell_links,
+                )
+            else:
+                part = mesh.create_cell_partitioner(mode=mesh.GhostMode.shared_facet)  # type: ignore
+        else:
+            part = _graph.partitioner()
 
         graph_mesh = mesh.create_mesh(
             comm,
             x=mesh_nodes,
             cells=cells_,
             e=ufl.Mesh(basix.ufl.element("Lagrange", "interval", 1, shape=(self._geom_dim,))),
-            partitioner=partitioner,
-            **kwargs,
+            partitioner=part,
+            max_facet_to_cell_links=max_facet_to_cell_links,
         )
         self._msh = graph_mesh
 
@@ -516,13 +520,13 @@ class NetworkMesh:
         """Return the list of in-edge colors for a given bifurcation node.
         Index is is the index of the bifurcation in {py:meth}`self.bifurcation_values`."""
         assert bifurcation_idx < len(self.bifurcation_values)
-        return self._bifurcation_in_color.links(np.int32(bifurcation_idx))
+        return self._bifurcation_in_color.links(int(bifurcation_idx))
 
     def out_edges(self, bifurcation_idx: int) -> npt.NDArray[np.int32]:
         """Return the list of out-edge colors for a given bifurcation node.
         Index is is the index of the bifurcation in {py:meth}`self.bifurcation_values`."""
         assert bifurcation_idx < len(self.bifurcation_values)
-        return self._bifurcation_out_color.links(np.int32(bifurcation_idx))
+        return self._bifurcation_out_color.links(int(bifurcation_idx))
 
     @property
     def num_edge_colors(self) -> int:

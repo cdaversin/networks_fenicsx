@@ -38,7 +38,7 @@ class Solver:
     ):
         self._assembler = assembler
 
-        self._ksp = PETSc.KSP().create(self._assembler.network.comm)  # type: ignore[attr-defined]
+        self._ksp = PETSc.KSP().create(self._assembler.network.comm)  # type: ignore[arg-type]
 
         self._A = dolfinx.fem.petsc.create_matrix(self._assembler.bilinear_forms, kind=kind)
         kind = "nest" if self._A.getType() == "nest" else kind  # type: ignore[attr-defined]
@@ -66,11 +66,13 @@ class Solver:
         opts = PETSc.Options()  # type: ignore[attr-defined]
         opts.prefixPush(self.ksp.getOptionsPrefix())
         for key, value in petsc_options.items():
-            opts[key] = value
+            opts.setValue(key, value)
         self.ksp.setFromOptions()
         self._A.setFromOptions()
         self._b.setFromOptions()
         opts.prefixPop()
+        for key, value in petsc_options.items():
+            opts.delValue(f"{self.ksp.getOptionsPrefix()}{key}")
 
     @property
     def assembler(self) -> assembly.HydraulicNetworkAssembler:
@@ -78,13 +80,15 @@ class Solver:
         return self._assembler
 
     @property
-    def A(self) -> PETSc.Mat:  # type: ignore[name-defined]
+    def A(self) -> PETSc.Mat:
         """System matrix."""
+        assert self._A is not None
         return self._A
 
     @property
-    def b(self) -> PETSc.Vec:  # type: ignore[name-defined]
+    def b(self) -> PETSc.Vec:
         """Right-hand side vector."""
+        assert self._b is not None
         return self._b
 
     def assemble(self, lhs: bool = True, rhs: bool = True):
@@ -101,13 +105,14 @@ class Solver:
         self.assembler.assemble(self._A, self._b, assemble_lhs=lhs, assemble_rhs=rhs)
 
     @property
-    def ksp(self) -> PETSc.KSP:  # type: ignore[name-defined]
+    def ksp(self) -> PETSc.KSP:
+        assert self._ksp is not None
         return self._ksp
 
     @dolfinx.common.timed("nxfx:Solver:solve")
     def solve(
-        self, functions: list[dolfinx.fem.Function] | None = None
-    ) -> list[dolfinx.fem.Function]:
+        self, functions: typing.Sequence[dolfinx.fem.Function] | None = None
+    ) -> typing.Sequence[dolfinx.fem.Function]:
         """Solve the linear system of equations and assign them to a set of corresponding
         DOLFINx functions.
 
@@ -123,15 +128,16 @@ class Solver:
                 functions.append(dolfinx.fem.Function(Vi, name=f"flux_color_{i}"))
             functions.append(dolfinx.fem.Function(self.assembler.pressure_space, name="pressure"))
             functions.append(dolfinx.fem.Function(self.assembler.lm_space, name="global_flux"))
-
+        assert self._x is not None
         self.ksp.solve(self.b, self._x)
         dolfinx.la.petsc._ghost_update(
             self._x,
-            insert_mode=PETSc.InsertMode.INSERT,  # type: ignore[attr-defined]
-            scatter_mode=PETSc.ScatterMode.FORWARD,  # type: ignore[attr-defined]
+            insert_mode=PETSc.InsertMode.INSERT,  # type: ignore[arg-type]
+            scatter_mode=PETSc.ScatterMode.FORWARD,  # type: ignore[arg-type]
         )
-        assert isinstance(self._x, PETSc.Vec)  # type: ignore[attr-defined]
-        dolfinx.fem.petsc.assign(self._x, functions)
+        assert isinstance(self._x, PETSc.Vec)
+        assert isinstance(functions, typing.Sequence)
+        dolfinx.fem.petsc.assign(self._x, functions)  # type: ignore[arg-type]
         return functions
 
     def __del__(self):
