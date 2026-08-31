@@ -19,9 +19,10 @@ import numpy.typing as npt
 
 import basix.ufl
 import ufl
-from dolfinx import common, fem, mesh
+from dolfinx import common, fem
 from dolfinx import graph as _graph
 from dolfinx import io as _io
+from dolfinx import mesh as _mesh
 
 __all__ = ["NetworkMesh"]
 
@@ -69,17 +70,17 @@ class NetworkMesh:
     _bifurcation_out_color: _graph.AdjacencyList
 
     # Mesh properties
-    _msh: mesh.Mesh | None
-    _subdomains: mesh.MeshTags | None
-    _facet_markers: mesh.MeshTags | None
-    _submesh_facet_markers: list[mesh.MeshTags]
-    _edge_meshes: list[mesh.Mesh]
-    _edge_entity_maps: list[mesh.EntityMap]
+    _msh: _mesh.Mesh | None
+    _subdomains: _mesh.MeshTags | None
+    _facet_markers: _mesh.MeshTags | None
+    _submesh_facet_markers: list[_mesh.MeshTags]
+    _edge_meshes: list[_mesh.Mesh]
+    _edge_entity_maps: list[_mesh.EntityMap]
     _orientation: fem.Function
 
     _boundary_values: npt.NDArray[np.int32]
-    _lm_mesh: mesh.Mesh | None
-    _lm_map: mesh.EntityMap | None
+    _lm_mesh: _mesh.Mesh | None
+    _lm_map: _mesh.EntityMap | None
 
     def __init__(
         self,
@@ -96,14 +97,14 @@ class NetworkMesh:
         self._create_lm_submesh()
 
     @property
-    def lm_mesh(self) -> mesh.Mesh:
+    def lm_mesh(self) -> _mesh.Mesh:
         """Lagrange multiplier mesh, a point-cloud mesh including each bifurcation."""
         if self._lm_mesh is None:
             raise RuntimeError("Lagrange multiplier submesh has not been created.")
         return self._lm_mesh
 
     @property
-    def lm_map(self) -> mesh.EntityMap:
+    def lm_map(self) -> _mesh.EntityMap:
         """Entity map for the :py:meth:`Lagrange multiplier mesh<NetworkMesh.lm_mesh>`"""
         if self._lm_map is None:
             raise RuntimeError("Lagrange multiplier entity map has not been created.")
@@ -127,7 +128,7 @@ class NetworkMesh:
         bifurcation_indices = self._facet_markers.indices[
             np.isin(self._facet_markers.values, self.bifurcation_values)
         ]
-        self._lm_mesh, self._lm_map = mesh.create_submesh(
+        self._lm_mesh, self._lm_map = _mesh.create_submesh(
             self.mesh,
             self.mesh.topology.dim - 1,
             bifurcation_indices,
@@ -330,19 +331,19 @@ class NetworkMesh:
 
         max_facet_to_cell_links = np.max(max_connections)
 
-        if hasattr(mesh, "create_cell_partitioner"):
-            sig = inspect.signature(mesh.create_cell_partitioner)
+        if hasattr(_mesh, "create_cell_partitioner"):
+            sig = inspect.signature(_mesh.create_cell_partitioner)
             if "max_facet_to_cell_links" in list(sig.parameters.keys()):
-                part = mesh.create_cell_partitioner(
-                    mesh.GhostMode.shared_facet,
+                part = _mesh.create_cell_partitioner(
+                    _mesh.GhostMode.shared_facet,
                     max_facet_to_cell_links=max_facet_to_cell_links,
                 )
             else:
-                part = mesh.create_cell_partitioner(mode=mesh.GhostMode.shared_facet)  # type: ignore
+                part = _mesh.create_cell_partitioner(mode=_mesh.GhostMode.shared_facet)  # type: ignore
         else:
             part = _graph.partitioner()
 
-        graph_mesh = mesh.create_mesh(
+        graph_mesh = _mesh.create_mesh(
             comm,
             x=mesh_nodes,
             cells=cells_,
@@ -359,7 +360,7 @@ class NetworkMesh:
             self.mesh, tdim, cells_, cell_markers_
         )
 
-        self._subdomains = mesh.meshtags_from_entities(
+        self._subdomains = _mesh.meshtags_from_entities(
             self.mesh,
             self.mesh.topology.dim,
             _graph.adjacencylist(local_entities),
@@ -371,7 +372,7 @@ class NetworkMesh:
             self.mesh, tdim, cells_, orientations
         )
 
-        meshtag_orientation = mesh.meshtags_from_entities(
+        meshtag_orientation = _mesh.meshtags_from_entities(
             self.mesh, tdim, _graph.adjacencylist(local_cells), local_orientations
         )
 
@@ -382,7 +383,7 @@ class NetworkMesh:
 
         # Correct orientations for possible reorder
         e_idx = np.arange(self.mesh.topology.index_map(tdim).size_local, dtype=np.int32)
-        e_geo = mesh.entities_to_geometry(self.mesh, tdim, e_idx)
+        e_geo = _mesh.entities_to_geometry(self.mesh, tdim, e_idx)
 
         global_input = self.mesh.geometry.input_global_indices
         in_order = _original_order(global_input[e_geo[:, 0]], global_input[e_geo[:, 1]])
@@ -416,7 +417,7 @@ class NetworkMesh:
 
         self.mesh.topology.create_connectivity(0, 1)
         local_vertices, local_vertex_values = _io.distribute_entity_data(self.mesh, 0, lv, lvv)
-        self._facet_markers = mesh.meshtags_from_entities(
+        self._facet_markers = _mesh.meshtags_from_entities(
             self.mesh,
             0,
             _graph.adjacencylist(local_vertices),
@@ -442,7 +443,7 @@ class NetworkMesh:
         for i in range(self._num_edge_colors):
             # Create submesh of color i
             edge_subdomain = self.subdomains.indices[self.subdomains.values == i]
-            edge_mesh, edge_map, vertex_map = mesh.create_submesh(
+            edge_mesh, edge_map, vertex_map = _mesh.create_submesh(
                 self.mesh, self.mesh.topology.dim, edge_subdomain
             )[0:3]
             self._edge_meshes.append(edge_mesh)
@@ -460,11 +461,11 @@ class NetworkMesh:
             marked_vertices = np.flatnonzero(sub_topology_values >= 0)
             marked_values = sub_topology_values[marked_vertices].copy()
             self._submesh_facet_markers.append(
-                mesh.meshtags(edge_mesh, 0, marked_vertices, marked_values)
+                _mesh.meshtags(edge_mesh, 0, marked_vertices, marked_values)
             )
 
     @property
-    def submesh_facet_markers(self) -> list[mesh.MeshTags]:
+    def submesh_facet_markers(self) -> list[_mesh.MeshTags]:
         if self._submesh_facet_markers is None:
             raise RuntimeError("Mesh has no submesh facet markers")
         return self._submesh_facet_markers
